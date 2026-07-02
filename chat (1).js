@@ -1,7 +1,5 @@
-// Netlify Function
-// Deployed URL: https://<your-site>.netlify.app/.netlify/functions/chat
-// Combined with netlify.toml (included in this project), it's also reachable
-// at /api/chat, matching what index.html calls.
+// Vercel Serverless Function
+// URL when deployed: https://<your-domain>/api/chat
 //
 // This currently talks to NaraRouter (https://router.naraya.ai), a third-party
 // gateway offering free daily token quotas via an OpenAI-compatible endpoint.
@@ -11,11 +9,11 @@
 // to an official Anthropic API key (see the commented-out block below).
 //
 // SETUP:
-// 1. Put this file at:  netlify/functions/chat.js
-// 2. Put netlify.toml at the root of your project.
-// 3. In Netlify → Site settings → Environment variables, add:
+// 1. Put this file at:  api/chat.js  (at the root of your project, next to your index.html)
+// 2. In your Vercel project settings → Environment Variables, add:
 //      NARAROUTER_API_KEY = sk-nry-...   (from https://router.naraya.ai/keys)
-// 4. Deploy (drag-and-drop or git push). No build step required for a static site.
+// 3. Deploy. Vercel auto-detects the /api folder and turns this into an endpoint —
+//    no extra config needed for a plain static site.
 //
 // The API key NEVER reaches the browser. Only this server-side function talks
 // to the upstream API.
@@ -32,32 +30,24 @@ Antworte kurz (max. 3-4 Sätze), freundlich, auf Deutsch, in der Sie-Form. Du bi
 
 const MAX_HISTORY_MESSAGES = 20; // simple guardrail against runaway conversations/cost
 
-exports.handler = async function (event) {
-  if (event.httpMethod !== "POST") {
-    return {
-      statusCode: 405,
-      body: JSON.stringify({ error: "Method not allowed" }),
-    };
+module.exports = async function handler(req, res) {
+  if (req.method !== "POST") {
+    res.setHeader("Allow", "POST");
+    return res.status(405).json({ error: "Method not allowed" });
   }
 
   const apiKey = process.env.NARAROUTER_API_KEY;
   if (!apiKey) {
     console.error("NARAROUTER_API_KEY is not set in the environment");
-    return { statusCode: 500, body: JSON.stringify({ error: "server_misconfigured" }) };
+    return res.status(500).json({ error: "server_misconfigured" });
   }
 
-  let payload;
-  try {
-    payload = JSON.parse(event.body || "{}");
-  } catch {
-    return { statusCode: 400, body: JSON.stringify({ error: "invalid_json" }) };
-  }
-
-  const messages = payload.messages;
+  const { messages } = req.body || {};
   if (!Array.isArray(messages) || messages.length === 0) {
-    return { statusCode: 400, body: JSON.stringify({ error: "invalid_request" }) };
+    return res.status(400).json({ error: "invalid_request" });
   }
 
+  // Basic shape validation so arbitrary payloads can't be forwarded upstream
   const cleanMessages = messages
     .filter(
       (m) =>
@@ -68,7 +58,7 @@ exports.handler = async function (event) {
     .slice(-MAX_HISTORY_MESSAGES);
 
   if (cleanMessages.length === 0) {
-    return { statusCode: 400, body: JSON.stringify({ error: "invalid_request" }) };
+    return res.status(400).json({ error: "invalid_request" });
   }
 
   try {
@@ -90,11 +80,11 @@ exports.handler = async function (event) {
 
     if (!upstream.ok) {
       console.error("NaraRouter API error:", upstream.status, data);
-      return { statusCode: 502, body: JSON.stringify({ error: "upstream_error" }) };
+      return res.status(502).json({ error: "upstream_error" });
     }
 
     const reply = data.choices?.[0]?.message?.content ?? null;
-    return { statusCode: 200, body: JSON.stringify({ reply }) };
+    return res.status(200).json({ reply });
 
     /* --- Official Anthropic API (swap to this later) ---
     const upstream = await fetch("https://api.anthropic.com/v1/messages", {
@@ -112,12 +102,12 @@ exports.handler = async function (event) {
       }),
     });
     const data = await upstream.json();
-    if (!upstream.ok) return { statusCode: 502, body: JSON.stringify({ error: "upstream_error" }) };
+    if (!upstream.ok) return res.status(502).json({ error: "upstream_error" });
     const block = (data.content || []).find((c) => c.type === "text");
-    return { statusCode: 200, body: JSON.stringify({ reply: block ? block.text : null }) };
+    return res.status(200).json({ reply: block ? block.text : null });
     */
   } catch (err) {
     console.error("Chat proxy error:", err);
-    return { statusCode: 500, body: JSON.stringify({ error: "server_error" }) };
+    return res.status(500).json({ error: "server_error" });
   }
 };
