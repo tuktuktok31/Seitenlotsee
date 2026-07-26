@@ -3,9 +3,8 @@
 //
 // This talks to OpenRouter (https://openrouter.ai), a well-established
 // aggregator that gives access to Claude and other models through one
-// OpenAI-compatible endpoint. Model used: anthropic/claude-haiku-4.5
-// ($1 input / $5 output per million tokens — cheap, plenty capable for
-// a scripted FAQ-style chat widget like this one).
+// OpenAI-compatible endpoint. // Model used: openrouter/free
+// Uses OpenRouter's free model router.
 //
 // SETUP:
 // 1. Put this file at:  api/chat.js  (at the root of your project, next to your index.html)
@@ -85,7 +84,7 @@ module.exports = async function handler(req, res) {
         "Authorization": `Bearer ${apiKey}`,
       },
       body: JSON.stringify({
-        model: "anthropic/claude-haiku-4.5",
+        model: "openrouter/free",
         max_tokens: 400,
         messages: [{ role: "system", content: SYSTEM_PROMPT }, ...cleanMessages],
       }),
